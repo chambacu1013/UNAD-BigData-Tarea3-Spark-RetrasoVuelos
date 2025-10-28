@@ -37,3 +37,49 @@ df_clean= df_clean.withColumn(
     .when(col("retraso_aerolinea_min") <= 0, "A TIEMPO")
     .otherwise("LIGERO RETRASO")
 )
+# --- 3.4 Convertir a entero (opcional, para ML) ---
+df_clean = df_clean.withColumn("retraso_aerolinea_min", col("retraso_aerolinea_min").cast(IntegerType()))
+print("=== TRANSFORMACIONES COMPLETADAS ===")
+df_clean.select("cod_aerolinea", "retraso_aerolinea_min", "estados_vuelo").show(20)
+
+# ========================
+# 4. ANÁLISIS EXPLORATORIO (EDA)
+# ========================
+
+# --- 4.1 Conteo total de vuelos por estado ---
+print("=== CONTEO POR ESTADO DE VUELO ===")
+status_count = df_clean.groupBy("estados_vuelo").count().orderBy(desc("count"))
+status_count.show()
+
+# --- 4.2 Estadísticas descriptivas de retrasos ---
+print("=== ESTADÍSTICAS DE RETRASOS ===")
+df_clean.select("retraso_aerolinea_min").describe().show()
+# --- 4.3 Retraso promedio por aerolínea ---
+print("=== RETRASO PROMEDIO POR AEROLÍNEA ===")
+delay_by_airline = df_clean \
+    .groupBy("cod_aerolinea") \
+    .agg(
+        round(avg("retraso_aerolinea_min"), 2).alias("AVG_RETRASO_MIN"),
+        count("cod_aerolinea").alias("TOTAL_VUELOS")
+    ) \
+    .orderBy(desc("AVG_RETRASO_MIN"))
+
+delay_by_airline.show(10)
+# --- 4.4 Aeropuertos con más retrasos (TOP 10 origen) ---
+print("=== AEROPUERTOS CON MÁS RETRASOS ===")
+top_delayed_airports = df_clean \
+    .filter(col("estados_vuelo") == "RETRASADO") \
+    .groupBy("airport") \
+    .count() \
+    .orderBy(desc("count")) \
+    .limit(10)
+top_delayed_airports.show()
+# ========================
+# 5. ALMACENAR RESULTADOS EN PARQUET (OPTIMIZADO)
+# ========================
+
+df_clean.write.mode("overwrite").partitionBy("estados_vuelo").parquet("resultados/estados_vuelos")
+print("=== RESULTADOS GUARDADOS EN PARQUET (PARTICIONADO POR ESTADO) ===")
+spark.stop()
+print("=== PROCESO COMPLETADO CON ÉXITO ===")
+
